@@ -2,6 +2,8 @@ package main
 
 import (
 	"bufio"
+	"crypto/rand"
+	"flag"
 	"fmt"
 	"github.com/drone/routes"
 	"io"
@@ -11,11 +13,30 @@ import (
 	"os/exec"
 )
 
-func Whoami(w http.ResponseWriter, r *http.Request) {
+var addr = flag.String("addr", ":8088", "http service address")
+
+type TaskExecution struct {
+	Service string `json:"service"`
+	Task    string `json:"task"`
+	TaskId  string `json:"task_id"`
+}
+
+type logLine struct {
+	task TaskExecution
+	line string
+}
+
+func generateId() string {
+	buf := make([]byte, 16)
+	io.ReadFull(rand.Reader, buf)
+	return fmt.Sprintf("%x", buf)
+}
+
+func taskRoute(w http.ResponseWriter, r *http.Request) {
 	params := r.URL.Query()
-	lastName := params.Get(":last")
-	firstName := params.Get(":first")
-	fmt.Fprintf(w, "you are %s %s", firstName, lastName)
+	task := &TaskExecution{params.Get(":service"), params.Get(":task"), generateId()}
+	executeTask(task)
+	routes.ServeJson(w, task)
 }
 
 func startWebserver() {
@@ -24,12 +45,19 @@ func startWebserver() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	fmt.Println(cwd)
 	mux.Static("/static/", cwd)
-	mux.Get("/:last/:first", Whoami)
+	mux.Get("/api/:service/:task", taskRoute)
 
 	http.Handle("/", mux)
-	http.ListenAndServe(":8088", nil)
+	http.ListenAndServe(*addr, nil)
+}
+
+func executeTask(task *TaskExecution) {
+	cmd := exec.Command("echo", "-n", "run.go\ntest\ntest\n")
+	commandOut := make(chan string)
+	go printOutput(commandOut)
+	captureOutput(cmd, commandOut)
+	close(commandOut)
 }
 
 func captureOutput(cmd *exec.Cmd, commandOut chan string) error {
@@ -55,16 +83,12 @@ func captureOutput(cmd *exec.Cmd, commandOut chan string) error {
 }
 
 func printOutput(commandOut chan string) {
-	for s := range commandOut {
-		fmt.Print(s)
+	for line := range commandOut {
+		fmt.Printf("%s", line)
 	}
 }
 
 func main() {
-	commandOut := make(chan string)
-	cmd := exec.Command("echo", "-n", "run.go")
-	go printOutput(commandOut)
-	captureOutput(cmd, commandOut)
-	close(commandOut)
+	flag.Parse()
 	startWebserver()
 }

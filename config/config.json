@@ -1,0 +1,31 @@
+{
+	"services": [
+		{
+			"name": "employer-graph",
+			"type": "dropwizard",
+			"port": 8080
+		},
+		{
+			"name": "event-audit",
+			"type": "dropwizard",
+			"port": 8080
+		}
+	],
+
+	"service_types": [
+		{
+			"type": "dropwizard",
+			"build-info": "/build-info",
+			"tasks": [
+				{
+					"name": "start",
+					"command": "/usr/local/${name}/stop"
+				},
+				{
+					"name": "stop",
+					"command": "/usr/local/${name}/stop"
+				}
+			]
+		}
+	]
+}
